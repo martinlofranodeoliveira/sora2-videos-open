@@ -34,7 +34,7 @@ const jobs = new VideoJobs().register('my-provider', async (spec, { signal }) =>
   // Call a service or local generator you control here. Keep credentials private.
   // Return only a safe serializable result, such as a local output identifier.
   return { outputId: 'your-real-output-id' };
-}, { startsPerMinute: 10 });
+}, { startsPerMinute: 10, maxConcurrent: 2 });
 const operation = jobs.submit({ provider: 'my-provider', prompt: 'A quiet forest', seconds: 8 });
 const completed = await operation.done;
 ```
@@ -42,10 +42,68 @@ const completed = await operation.done;
 The example adapter is a placeholder: replace it with your real implementation.
 Job records are in memory; they do not survive restart. Completed records can be
 removed with `forget(id)`. Pending jobs can be cancelled with an `AbortSignal`;
-running adapters must honor the supplied signal themselves. A rate limit bounds
-job starts per minute, not simultaneous executions. Caller-provided adapters
-are trusted code and must return sanitized results. A maximum record count bounds
-retention; large video data belongs in files, not job metadata.
+running adapters must honor the supplied signal themselves. Caller-provided
+adapters are trusted code and must return sanitized results. A maximum record
+count bounds retention; large video data belongs in files, not job metadata.
+
+## Rate and concurrency limits
+
+`VideoJobs.register(name, adapter, options)` accepts two independent provider
+limits:
+
+- `startsPerMinute`: positive integer, default `10`. Bounds starts in a rolling
+  60-second window. Completed or failed jobs still consume that start budget.
+- `maxConcurrent`: optional positive safe integer. Bounds adapter calls still
+  waiting for a result. A call keeps its slot until its returned promise settles,
+  including rejection. Omitting this option preserves the previous behavior:
+  unlimited simultaneous calls within the per-minute start budget. Set a cap
+  explicitly for providers or local generators that have limited capacity.
+
+Both limits must permit a start. A concurrency slot does not bypass an exhausted
+rate budget; a queued cancellation consumes neither a slot nor a start. The
+queue prioritizes pending high-priority entries before pending low-priority
+entries, retaining FIFO order within each priority. Running calls are never
+preempted. Cancellation of a running call is cooperative: its adapter must
+settle its promise before the slot can be reused.
+
+The raw queue API also accepts `maxConcurrent`:
+
+```js
+import {
+  configureGenerationQueue,
+  scheduleGeneration,
+  getGenerationQueueSnapshot,
+  GenerationQueuePriority,
+} from './src/index.js';
+
+configureGenerationQueue('renderer', { limitPerMinute: 10, maxConcurrent: 2 });
+const result = await scheduleGeneration('renderer', {
+  priority: GenerationQueuePriority.HIGH,
+  execute: () => renderYourLocalVideo(), // Supply your own implementation.
+});
+console.log(getGenerationQueueSnapshot().renderer);
+```
+
+Calling `configureGenerationQueue` again updates an existing queue atomically.
+Increasing its cap can immediately start pending work if rate budget remains.
+Lowering its cap leaves running work intact and blocks further starts until the
+active count falls below the new cap. Omitting `maxConcurrent` on an existing
+queue keeps its cap; a new queue starts unlimited. Raw `limitPerMinute` retains
+its existing default and normalization rules: omitted or invalid values become
+`1`, and positive fractions are rounded down to at least `1`.
+
+The snapshot adds `active` (occupied slots) and `maxConcurrent` (`null` for
+unlimited), alongside the existing rate and pending counts. Snapshots remain
+JSON serializable. Invalid concurrency caps, including `0`, fractions, numeric
+strings, `null`, or `Infinity`, throw `TypeError` without changing the queue.
+When only concurrency blocks progress, completion wakes the queue without a
+polling timer. Rate-blocked pending work retains a referenced timer so a
+standalone Node process stays alive until it can start.
+
+The regression suite uses simulated adapters and controlled promises to cover
+slot bounds, cancellation, rejection, reconfiguration and priority. A mock clock
+tests the full rate window without waiting a real minute. These tests do not
+generate videos or contact a provider.
 
 ## Public release boundaries
 
@@ -57,7 +115,7 @@ the reusable core, not every feature of the former SaaS.
 ## Roadmap
 
 - Add a persistent job store with an explicit retention policy.
-- Add bounded concurrency independently of the per-minute rate limit.
+- Add per-provider queue shutdown and explicit cancellation of pending work.
 - Add adapters for currently supported providers, using mocked HTTP tests.
 - Add batch media reports and cancellation-aware local rendering.
 

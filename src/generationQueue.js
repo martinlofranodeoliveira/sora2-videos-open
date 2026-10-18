@@ -6,9 +6,11 @@ export const GenerationQueuePriority = Object.freeze({
 });
 
 class ProviderRateQueue {
-  constructor({ label, limitPerMinute }) {
+  constructor({ label, limitPerMinute, maxConcurrent }) {
     this.label = label ?? "queue";
     this.limitPerMinute = ProviderRateQueue.normalizeLimit(limitPerMinute);
+    this.maxConcurrent = ProviderRateQueue.normalizeConcurrency(maxConcurrent);
+    this.active = 0;
     this.recentStarts = [];
     this.highQueue = [];
     this.lowQueue = [];
@@ -24,12 +26,23 @@ class ProviderRateQueue {
     return Math.max(1, Math.floor(parsed));
   }
 
-  setLimit(limit) {
-    const normalized = ProviderRateQueue.normalizeLimit(limit);
-    if (normalized === this.limitPerMinute) {
-      return;
+  static normalizeConcurrency(limit) {
+    if (limit === undefined) return Infinity;
+    if (!Number.isSafeInteger(limit) || limit < 1) {
+      throw new TypeError("maxConcurrent must be a positive integer");
     }
-    this.limitPerMinute = normalized;
+    return limit;
+  }
+
+  setLimit(limit) {
+    this.setLimits(ProviderRateQueue.normalizeLimit(limit), this.maxConcurrent);
+  }
+
+  setLimits(limitPerMinute, maxConcurrent) {
+    // Apply both limits before draining: a lower concurrency cap must not race
+    // with starts released by a higher per-minute rate.
+    this.limitPerMinute = limitPerMinute;
+    this.maxConcurrent = maxConcurrent;
     this.process();
   }
 
@@ -126,7 +139,7 @@ class ProviderRateQueue {
   }
 
   canStartAnother() {
-    return this.limitPerMinute > 0 && this.recentStarts.length < this.limitPerMinute;
+    return this.active < this.maxConcurrent && this.recentStarts.length < this.limitPerMinute;
   }
 
   nextEntry() {
@@ -151,31 +164,33 @@ class ProviderRateQueue {
     entry.started = true;
     entry.cleanupAbort?.();
     entry.cleanupAbort = null;
+    this.active += 1;
     this.recentStarts.push(Date.now());
 
     Promise.resolve()
       .then(() => entry.execute())
-      .then((result) => {
-        entry.resolve(result);
-      })
-      .catch((error) => {
-        entry.reject(error);
-      })
       .finally(() => {
+        this.active -= 1;
         this.process();
-      });
+      })
+      .then(entry.resolve, entry.reject);
   }
 
   scheduleTimerIfNeeded() {
+    // Completion wakes a queue with no free slots. A timer in that state is
+    // unnecessary, and can spin at 0 ms after the rate window expires.
+    const waitingForRate = this.pendingEntries() > 0
+      && this.active < this.maxConcurrent
+      && this.recentStarts.length >= this.limitPerMinute;
     if (this.timer) {
-      if (!this.pendingEntries() || this.canStartAnother()) {
+      if (!waitingForRate) {
         clearTimeout(this.timer);
         this.timer = null;
       }
       return;
     }
 
-    if (!this.pendingEntries() || this.canStartAnother() || !this.recentStarts.length) {
+    if (!waitingForRate || !this.recentStarts.length) {
       return;
     }
 
@@ -217,6 +232,8 @@ class ProviderRateQueue {
     return {
       label: this.label,
       limitPerMinute: this.limitPerMinute,
+      maxConcurrent: Number.isFinite(this.maxConcurrent) ? this.maxConcurrent : null,
+      active: this.active,
       recentStarts: this.recentStarts.length,
       highQueue: this.highQueue.length,
       lowQueue: this.lowQueue.length,
@@ -235,13 +252,18 @@ export function configureGenerationQueue(providerType, options = {}) {
   const limitPerMinute = ProviderRateQueue.normalizeLimit(options.limitPerMinute ?? 1);
   const label = options.label ?? providerType;
   let queue = providerQueues.get(providerType);
+  // Omitting this option keeps an existing cap; new queues remain unlimited.
+  const maxConcurrent = options.maxConcurrent === undefined
+    ? (queue?.maxConcurrent ?? Infinity)
+    : ProviderRateQueue.normalizeConcurrency(options.maxConcurrent);
 
   if (!queue) {
-    queue = new ProviderRateQueue({ label, limitPerMinute });
+    queue = new ProviderRateQueue({ label, limitPerMinute,
+      maxConcurrent: Number.isFinite(maxConcurrent) ? maxConcurrent : undefined });
     providerQueues.set(providerType, queue);
   } else {
     queue.label = label;
-    queue.setLimit(limitPerMinute);
+    queue.setLimits(limitPerMinute, maxConcurrent);
   }
 
   return queue;

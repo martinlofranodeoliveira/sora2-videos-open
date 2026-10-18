@@ -12,13 +12,13 @@ export class VideoJobs {
     this.maxJobs = maxJobs;
   }
 
-  register(name, execute, { startsPerMinute = 10 } = {}) {
+  register(name, execute, { startsPerMinute = 10, maxConcurrent } = {}) {
     if (typeof name !== "string" || !/^[a-z][a-z0-9-]{0,39}$/.test(name)) throw new TypeError("Invalid provider name");
     if (typeof execute !== "function") throw new TypeError("A provider must be a function");
     if (!Number.isSafeInteger(startsPerMinute) || startsPerMinute < 1) throw new TypeError("startsPerMinute must be a positive integer");
     if (this.#providers.has(name)) throw new Error("Provider is already registered");
     const queue = `${this.#queuePrefix}:${name}`;
-    configureGenerationQueue(queue, { limitPerMinute: startsPerMinute, label: name });
+    configureGenerationQueue(queue, { limitPerMinute: startsPerMinute, maxConcurrent, label: name });
     this.#providers.set(name, { execute, queue });
     return this;
   }
