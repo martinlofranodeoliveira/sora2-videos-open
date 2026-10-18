@@ -1,0 +1,12 @@
+{
+  "name": "sora2-videos-open",
+  "version": "0.1.0",
+  "description": "Provider-neutral video job queues and local video inspection from the Sora2 Videos project",
+  "type": "module",
+  "private": false,
+  "license": "MIT",
+  "engines": {"node": ">=22"},
+  "exports": {".": "./src/index.js", "./queue": "./src/generationQueue.js"},
+  "bin": {"video-workbench": "bin/video-workbench.js"},
+  "scripts": {"test": "node --test", "demo": "node bin/video-workbench.js demo"}
+}
