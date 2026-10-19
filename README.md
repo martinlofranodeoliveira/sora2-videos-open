@@ -84,7 +84,7 @@ const result = await scheduleGeneration('renderer', {
 console.log(getGenerationQueueSnapshot().renderer);
 ```
 
-Calling `configureGenerationQueue` again updates an existing queue atomically.
+Calling `configureGenerationQueue` again updates an existing open queue atomically.
 Increasing its cap can immediately start pending work if rate budget remains.
 Lowering its cap leaves running work intact and blocks further starts until the
 active count falls below the new cap. Omitting `maxConcurrent` on an existing
@@ -92,9 +92,10 @@ queue keeps its cap; a new queue starts unlimited. Raw `limitPerMinute` retains
 its existing default and normalization rules: omitted or invalid values become
 `1`, and positive fractions are rounded down to at least `1`.
 
-The snapshot adds `active` (occupied slots) and `maxConcurrent` (`null` for
-unlimited), alongside the existing rate and pending counts. Snapshots remain
-JSON serializable. Invalid concurrency caps, including `0`, fractions, numeric
+The snapshot includes `active` (occupied slots), `maxConcurrent` (`null` for
+unlimited), and `closed`, alongside the existing rate and pending counts.
+Snapshots remain JSON serializable, including raw names such as `__proto__`.
+Invalid concurrency caps, including `0`, fractions, numeric
 strings, `null`, or `Infinity`, throw `TypeError` without changing the queue.
 When only concurrency blocks progress, completion wakes the queue without a
 polling timer. Rate-blocked pending work retains a referenced timer so a
@@ -104,6 +105,50 @@ The regression suite uses simulated adapters and controlled promises to cover
 slot bounds, cancellation, rejection, reconfiguration and priority. A mock clock
 tests the full rate window without waiting a real minute. These tests do not
 generate videos or contact a provider.
+
+## Shut down a provider
+
+`VideoJobs.shutdown(name)` closes one registered provider in that manager:
+
+```js
+const closed = jobs.shutdown('my-provider');
+// Await the done promises you already hold to observe their final outcomes.
+```
+
+It returns `true` on the first closure and `false` for an unknown or already
+closed provider. Invalid names throw `TypeError`, using the same name rules as
+`register`. Pending operations are removed from the queue, their abort listeners
+are detached, and their `done` promises reject with `Queued operation cancelled`.
+Their records become `cancelled` as those rejections settle. A later `submit`
+throws an error with code `QUEUE_SHUTDOWN` before creating a job record, including
+when the record capacity is full. Closure affects neither other providers nor
+providers registered on another `VideoJobs` instance.
+
+Running operations keep their slots and original outcomes. A slot is reserved
+synchronously during scheduling, before the adapter's execution microtask. Such
+an operation can still enter its adapter after shutdown, even if its job record
+currently says `queued`. Shutdown cancels only operations that have not received
+a slot; it does not abort signals or forcibly interrupt adapters. Running
+cancellation remains cooperative.
+
+The raw API exports `shutdownGenerationQueue(providerType)`, with the same
+`true`/`false` result. It accepts any nonempty string literally; invalid inputs
+throw `TypeError`. Pending and future raw queue operations reject with a generic
+error whose code is `QUEUE_SHUTDOWN`. Closing a queue clears its rate timer;
+later completions and timer callbacks cannot restart it. This can let a
+standalone process exit once its other work has settled.
+
+Closure is terminal: reconfiguring a closed raw queue throws `QUEUE_SHUTDOWN`,
+and re-registering a provider on the same manager remains a duplicate error.
+There is no reopen or registry-pruning operation. Closed queues remain visible
+in snapshots with `closed: true`, their active count and retained start history;
+shutdown does not erase history or release registry entries. Terminal job
+records can still be removed with `forget(id)`. A new manager creates its own
+queue namespace and independent limits.
+
+Shutdown tests use controlled adapters, mock clocks, and a short child-process
+exit check. They exercise pending priorities, timer/listener cleanup, reserved
+slots, rejection redaction and isolation without contacting providers.
 
 ## Public release boundaries
 
@@ -115,7 +160,6 @@ the reusable core, not every feature of the former SaaS.
 ## Roadmap
 
 - Add a persistent job store with an explicit retention policy.
-- Add per-provider queue shutdown and explicit cancellation of pending work.
 - Add adapters for currently supported providers, using mocked HTTP tests.
 - Add batch media reports and cancellation-aware local rendering.
 

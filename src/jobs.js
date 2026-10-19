@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { configureGenerationQueue, scheduleGeneration } from "./generationQueue.js";
+import { configureGenerationQueue, scheduleGeneration, shutdownGenerationQueue } from "./generationQueue.js";
 
 /** In-memory orchestration. Providers receive only the validated public job spec. */
 export class VideoJobs {
@@ -18,14 +18,25 @@ export class VideoJobs {
     if (!Number.isSafeInteger(startsPerMinute) || startsPerMinute < 1) throw new TypeError("startsPerMinute must be a positive integer");
     if (this.#providers.has(name)) throw new Error("Provider is already registered");
     const queue = `${this.#queuePrefix}:${name}`;
-    configureGenerationQueue(queue, { limitPerMinute: startsPerMinute, maxConcurrent, label: name });
-    this.#providers.set(name, { execute, queue });
+    const rateQueue = configureGenerationQueue(queue, { limitPerMinute: startsPerMinute, maxConcurrent, label: name });
+    this.#providers.set(name, { execute, queue, rateQueue });
     return this;
+  }
+
+  shutdown(name) {
+    if (typeof name !== "string" || !/^[a-z][a-z0-9-]{0,39}$/.test(name)) throw new TypeError("Invalid provider name");
+    const adapter = this.#providers.get(name);
+    return adapter ? shutdownGenerationQueue(adapter.queue) : false;
   }
 
   submit({ provider, prompt, seconds = 8, size = "1280x720" } = {}, { signal } = {}) {
     const adapter = this.#providers.get(provider);
     if (!adapter) throw new Error("Unknown provider");
+    if (adapter.rateQueue.closed) {
+      const error = new Error("Generation queue is shut down");
+      error.code = "QUEUE_SHUTDOWN";
+      throw error;
+    }
     if (typeof prompt !== "string" || !prompt.trim() || prompt.length > 10000) throw new TypeError("prompt must contain 1–10000 characters");
     if (!Number.isSafeInteger(seconds) || seconds < 1 || seconds > 120) throw new TypeError("seconds must be an integer between 1 and 120");
     if (!/^(\d{2,4})x(\d{2,4})$/.test(size)) throw new TypeError("size must be WIDTHxHEIGHT");
