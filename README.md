@@ -46,6 +46,13 @@ running adapters must honor the supplied signal themselves. Caller-provided
 adapters are trusted code and must return sanitized results. A maximum record
 count bounds retention; large video data belongs in files, not job metadata.
 
+`submit` requires `size` to be a primitive string exactly `WIDTHxHEIGHT` with
+ASCII digits (2-4 digits per side, 64-4096 pixels each). Whitespace, line
+terminators (`\r`, `\n`, `\u2028`, `\u2029`) or coerced objects throw
+`TypeError` before a record is created or anything is enqueued. Validating
+dimensions does not validate provider capability: providers enforce their own
+supported resolutions and may reject a well-formed size.
+
 ## Rate and concurrency limits
 
 `VideoJobs.register(name, adapter, options)` accepts two independent provider

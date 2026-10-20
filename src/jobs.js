@@ -39,8 +39,13 @@ export class VideoJobs {
     }
     if (typeof prompt !== "string" || !prompt.trim() || prompt.length > 10000) throw new TypeError("prompt must contain 1–10000 characters");
     if (!Number.isSafeInteger(seconds) || seconds < 1 || seconds > 120) throw new TypeError("seconds must be an integer between 1 and 120");
-    if (!/^(\d{2,4})x(\d{2,4})$/.test(size)) throw new TypeError("size must be WIDTHxHEIGHT");
-    const [width, height] = size.split("x").map(Number);
+    if (typeof size !== "string") throw new TypeError("size must be WIDTHxHEIGHT");
+    const dimensions = size.split("x");
+    if (dimensions.length !== 2) throw new TypeError("size must be WIDTHxHEIGHT");
+    const [widthText, heightText] = dimensions;
+    if (!/^[0-9]{2,4}$/.test(widthText) || !/^[0-9]{2,4}$/.test(heightText)) throw new TypeError("size must be WIDTHxHEIGHT");
+    if (`${widthText}x${heightText}` !== size) throw new TypeError("size must be WIDTHxHEIGHT");
+    const [width, height] = [Number(widthText), Number(heightText)];
     if (width < 64 || height < 64 || width > 4096 || height > 4096) throw new TypeError("Dimensions must be between 64 and 4096 pixels");
     if (this.#jobs.size >= this.maxJobs) throw new Error("Job capacity reached; forget a completed job first");
     const id = randomUUID();
