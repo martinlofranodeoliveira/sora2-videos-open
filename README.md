@@ -157,6 +157,50 @@ Shutdown tests use controlled adapters, mock clocks, and a short child-process
 exit check. They exercise pending priorities, timer/listener cleanup, reserved
 slots, rejection redaction and isolation without contacting providers.
 
+## Batch video inspection
+
+`inspectVideoBatch(files, options)` inspects a small batch of local video paths with bounded parallelism. It is a thin batch wrapper around `inspectVideo`; it adds no shell, program execution, file reading or network of its own.
+
+```js
+import { inspectVideoBatch } from './src/index.js';
+
+// Entirely synthetic injected inspector used for docs and tests.
+const syntheticInspector = async (file, { timeout }) => ({
+  format: 'mp4',
+  durationSeconds: 1.5,
+  bytes: 42,
+  width: 640,
+  height: 480,
+  codec: 'h264',
+  audioStreams: 1
+});
+
+const results = await inspectVideoBatch(['clip-a.mp4', 'clip-b.mp4'], {
+  inspector: syntheticInspector,
+  concurrency: 2,
+  timeout: 5000
+});
+
+for (const entry of results) {
+  if (entry.status === 'ok') {
+    console.log(entry.index, entry.video.width, entry.video.height);
+  } else {
+    console.log(entry.index, entry.code); // always 'INSPECTION_FAILED'
+  }
+}
+```
+
+Scope and limits:
+
+- `files` is a dense `Array` (every index has its own property) with 0 to 32 primitive strings, each 1 to 4096 UTF-16 units and without `NUL`. Duplicates are inspected once per occurrence in index order; entries are never deduplicated or coerced.
+- `options` must be a plain object (`Object.prototype` or `null` prototype) containing only `inspector`, `concurrency` and `timeout`. `undefined` values use defaults. Any other string or symbol key, array, `null` or other prototype rejects with `TypeError('INVALID_MEDIA_BATCH_INPUT')` before the inspector runs.
+- Defaults are `inspector: inspectVideo`, `concurrency: 2`, `timeout: 15000`. `concurrency` is an integer 1 to 4; `timeout` is an integer 1 to 30000. Only `{ timeout }` is forwarded as the second inspector argument.
+- Scheduling fills free slots up to `concurrency` in index order and never exceeds it in flight; a slot is released only when that inspector promise settles. The result array preserves input order even when completions are out of order.
+- Success entries are exactly `{ index, status: 'ok', video: { format, durationSeconds, bytes, width, height, codec, audioStreams } }` with no extra keys or shared references. Missing `format`, `durationSeconds`, `bytes` or `codec` normalizes to `null`; `width`, `height` and `audioStreams` are required. Unknown inspector fields are never read.
+- Individual sync throws, rejections, missing/invalid metadata or throwing getters become exactly `{ index, status: 'error', code: 'INSPECTION_FAILED' }` without messages, stacks, paths or partial data. One entry never rejects the whole batch.
+
+Mocked versus real: `test/media_batch.test.js` uses only injected synthetic inspectors and controlled promises to cover order, duplicates, limits, validation, projection and fixed errors. The default `inspector` is the real `inspectVideo(file, { timeout })`, which requires a separately installed `ffprobe` and a local file you choose, with `protocol_whitelist=file` and no shell. No free generation, working Sora 2 service, broad anonymization, callback sandbox or full SaaS is promised, and no real media, accounts or providers are used here.
+
 ## Public release boundaries
 
 See [NOTICE.md](NOTICE.md). Provider secrets, business endpoints, billing,
