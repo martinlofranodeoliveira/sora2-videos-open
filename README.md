@@ -301,3 +301,52 @@ Examples (JSON input and expected output):
 ```
 
 Public regression tests: `test/community_video_inspection_normalizer.test.js`.
+
+
+<!-- community-core:provider-queue-limits-preview -->
+### Deterministic Provider Queue Limits Preview
+
+Lets video pipeline users pre-validate provider rate and concurrency caps locally with a pure deterministic check that mirrors VideoJobs.register limits, catching malformed startsPerMinute or maxConcurrent before creating queues without timers, network, or provider calls.
+
+Reusable deterministic JSON core: `src/community/provider_queue_limits_preview.mjs`, API `runFeature(payload)`. This module is independently tested; application/UI integration is outside this change.
+
+Public API is runFeature(payload). payload must be a non-null non-Array object containing only keys startsPerMinute and maxConcurrent; Array payload, null payload, non-object payload or any other own enumerable string key throws TypeError('INVALID_QUEUE_LIMITS') before any normalization. startsPerMinute when omitted or undefined defaults to 10, else must satisfy Number.isSafeInteger and value >=1, else throws TypeError('INVALID_QUEUE_LIMITS') for 0, negatives, fractions, numeric strings, null, NaN, Infinity, booleans, objects or arrays without coercion. maxConcurrent when omitted or undefined defaults to null for unlimited, else must satisfy Number.isSafeInteger and value >=1, else throws TypeError('INVALID_QUEUE_LIMITS') for 0, fractions, numeric strings, null, NaN, Infinity, booleans, objects or arrays without coercion; explicit null never means unlimited. On valid input return a fresh plain object {startsPerMinute,maxConcurrent} in this order where maxConcurrent is null for unlimited; no extra keys, no shared references, no timestamps. No input mutation, no queue creation, no queue mutation, no timers, no Date, no randomness, no callbacks, no dependencies, no provider calls, no network, no shell, no file reading; deterministic pure JSON transform mirroring VideoJobs.register rate and concurrency validation without creating queues.
+
+Examples (JSON input and expected output):
+
+```json
+{
+  "input": {
+    "maxConcurrent": 2,
+    "startsPerMinute": 10
+  },
+  "output": {
+    "maxConcurrent": 2,
+    "startsPerMinute": 10
+  }
+}
+```
+
+```json
+{
+  "input": {},
+  "output": {
+    "maxConcurrent": null,
+    "startsPerMinute": 10
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "startsPerMinute": 5
+  },
+  "output": {
+    "maxConcurrent": null,
+    "startsPerMinute": 5
+  }
+}
+```
+
+Public regression tests: `test/community_provider_queue_limits_preview.test.js`.
