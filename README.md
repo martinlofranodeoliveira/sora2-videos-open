@@ -469,3 +469,72 @@ Examples (JSON input and expected output):
 ```
 
 Public regression tests: `test/community_video_job_forget_preview.test.js`.
+
+
+<!-- community-core:video-batch-input-preview -->
+### Deterministic Video Batch Inspection Request Preview
+
+Lets toolkit users pre-validate inspectVideoBatch file lists and bounds locally with a pure deterministic check that mirrors concurrency and timeout limits, catching malformed batch requests before inspection without ffprobe, shell, files, network, timers or provider calls.
+
+Reusable deterministic JSON core: `src/community/video_batch_input_preview.mjs`, API `runFeature(payload)`. This module is independently tested; application/UI integration is outside this change.
+
+Public API is runFeature(payload). payload must be a non-null non-Array object containing only keys files, concurrency and timeout using Object.entries own enumerable string-key checks with no coercion, otherwise throws TypeError('INVALID_BATCH_INPUT') before reading inner values. files must be present and must be an Array with length 0 to 32 inclusive, otherwise throws TypeError('INVALID_BATCH_INPUT'). Each element observed in input order with for-of iteration must be a primitive string with length 1 to 4096, otherwise throws TypeError('INVALID_BATCH_INPUT') for missing, undefined, null, empty, overlong, numeric, boolean, array or object values without coercion; holes yield undefined and thus throw; duplicates are preserved in order with no deduplication or sorting. concurrency when omitted or undefined defaults to 2, otherwise must satisfy Number.isSafeInteger with 1 to 4 inclusive, otherwise throws TypeError('INVALID_BATCH_INPUT') without coercion for fractions, numeric strings, null, NaN, Infinity or booleans. timeout when omitted or undefined defaults to 15000, otherwise must satisfy Number.isSafeInteger with 1 to 30000 inclusive, otherwise throws TypeError('INVALID_BATCH_INPUT') with same no-coercion rule. To extract fields iterate Object.entries with for-of and Map get/set instead of variable computed access, with no prototype/constructor access and no input mutation. On valid input return a fresh plain object {files,concurrency,timeout} in this order with no extra keys and no shared references where files is a fresh Array built with push in input order, concurrency and timeout are effective values. Preserve input with no mutation, no inspector execution, no shell, no file reading, no ffprobe, no network, no env, no processes, no time, no Date, no randomness, no callbacks, no dependencies and no queue creation, deterministic pure JSON transform previewing inspectVideoBatch request validation without running inspection.
+
+Examples (JSON input and expected output):
+
+```json
+{
+  "input": {
+    "files": [
+      "clip-a.mp4",
+      "clip-b.mp4"
+    ]
+  },
+  "output": {
+    "concurrency": 2,
+    "files": [
+      "clip-a.mp4",
+      "clip-b.mp4"
+    ],
+    "timeout": 15000
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "concurrency": 1,
+    "files": [],
+    "timeout": 5000
+  },
+  "output": {
+    "concurrency": 1,
+    "files": [],
+    "timeout": 5000
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "concurrency": 4,
+    "files": [
+      "a.mp4",
+      "a.mp4"
+    ],
+    "timeout": 30000
+  },
+  "output": {
+    "concurrency": 4,
+    "files": [
+      "a.mp4",
+      "a.mp4"
+    ],
+    "timeout": 30000
+  }
+}
+```
+
+Public regression tests: `test/community_video_batch_input_preview.test.js`.
