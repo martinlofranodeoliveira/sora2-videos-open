@@ -350,3 +350,66 @@ Examples (JSON input and expected output):
 ```
 
 Public regression tests: `test/community_provider_queue_limits_preview.test.js`.
+
+
+<!-- community-core:video-job-spec-preview -->
+### Deterministic Video Job Spec Preview
+
+Lets pipeline users pre-validate VideoJobs.submit specs locally with a pure deterministic check that mirrors prompt, seconds, size and provider-name limits, catching malformed specs before queueing without timers, network, ffprobe, files or provider calls.
+
+Reusable deterministic JSON core: `src/community/video_job_spec_preview.mjs`, API `runFeature(payload)`. This module is independently tested; application/UI integration is outside this change.
+
+Public API is runFeature(payload). payload must be a non-null non-Array object containing only keys provider, prompt, seconds and size using Object.entries own enumerable string-key checks with no coercion; Array payload, null payload, non-object payload or any other own enumerable string key throws TypeError('INVALID_JOB_SPEC') before any normalization. provider must be present and must be a primitive string matching /^[a-z][a-z0-9-]{0,39}$/, else throws TypeError('INVALID_JOB_SPEC') for missing, undefined, empty, overlong, uppercase, whitespace, numeric or coerced values without coercion. prompt must be present and must be a primitive string where prompt.length is 1 to 10000 inclusive and prompt.trim() is non-empty, else throws TypeError('INVALID_JOB_SPEC') for missing, undefined, non-string, empty, whitespace-only or overlong values without coercion. seconds when omitted or undefined defaults to 8, else must satisfy Number.isSafeInteger and 1 to 120 inclusive, else throws TypeError('INVALID_JOB_SPEC') for 0, out-of-range, fractions, numeric strings, null, NaN, Infinity or booleans without coercion. size when omitted or undefined defaults to '1280x720', else must be a primitive string exactly WIDTHxHEIGHT where split on 'x' yields 2 parts each matching /^[0-9]{2,4}$/ and reconstructed WIDTHxHEIGHT equals input and Number values each satisfy 64 to 4096 inclusive, else throws TypeError('INVALID_JOB_SPEC') for whitespace, line terminators, wrong parts, non-digits, out-of-range or coerced objects without coercion. On valid input return a fresh plain object {provider,prompt,seconds,size} in this order where prompt is trimmed and seconds and size are effective values; no extra keys, no shared references, no timestamps. No input mutation, no job creation, no queue creation, no queue mutation, no timers, no Date, no randomness, no callbacks, no dependencies, no provider calls, no network, no shell, no file reading, no ffprobe; deterministic pure JSON transform mirroring VideoJobs.submit spec validation without queueing jobs.
+
+Examples (JSON input and expected output):
+
+```json
+{
+  "input": {
+    "prompt": "A quiet forest",
+    "provider": "my-provider"
+  },
+  "output": {
+    "prompt": "A quiet forest",
+    "provider": "my-provider",
+    "seconds": 8,
+    "size": "1280x720"
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "prompt": "  hello world  ",
+    "provider": "renderer-1",
+    "seconds": 10,
+    "size": "640x480"
+  },
+  "output": {
+    "prompt": "hello world",
+    "provider": "renderer-1",
+    "seconds": 10,
+    "size": "640x480"
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "prompt": "x",
+    "provider": "a",
+    "seconds": 1,
+    "size": "64x64"
+  },
+  "output": {
+    "prompt": "x",
+    "provider": "a",
+    "seconds": 1,
+    "size": "64x64"
+  }
+}
+```
+
+Public regression tests: `test/community_video_job_spec_preview.test.js`.
