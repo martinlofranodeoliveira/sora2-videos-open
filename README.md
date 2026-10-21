@@ -937,3 +937,84 @@ Examples (JSON input and expected output):
 ```
 
 Public regression tests: `test/community_video_priority_order_preview.test.js`.
+
+
+<!-- community-core:video-batch-scheduling-preview -->
+### Deterministic Video Batch Scheduling Preview
+
+Lets toolkit users pre-check inspectVideoBatch slot filling locally with a pure deterministic preview that mirrors index-order concurrency filling, catching oversized batches or invalid parallelism before inspection without ffprobe, shell, files, network, timers or provider calls.
+
+Reusable deterministic JSON core: `src/community/video_batch_scheduling_preview.mjs`, API `runFeature(payload)`. This module is independently tested; application/UI integration is outside this change.
+
+Public API is runFeature(payload). payload must be a non-null non-Array object containing only keys fileCount and concurrency using Object.entries own enumerable string-key checks with no coercion, otherwise throws TypeError('INVALID_BATCH_SCHEDULING_PREVIEW') before reading inner values. fileCount must be a primitive number satisfying Number.isSafeInteger with 0 <= value <= 32, otherwise throws TypeError('INVALID_BATCH_SCHEDULING_PREVIEW') for missing, undefined, null, strings, booleans, arrays, objects, fractions, negatives or overlong values without coercion. concurrency must be a primitive number satisfying Number.isSafeInteger with 1 <= value <= 4, otherwise throws TypeError('INVALID_BATCH_SCHEDULING_PREVIEW') for missing, undefined, null, strings, booleans, arrays, objects, zero, fractions or out-of-range values without coercion. To extract fields iterate Object.entries with for-of and Map get and set instead of variable computed access, with no prototype or constructor access and no input mutation. Build objects with object literals, arrays with push, and maps with set. Call builtins directly without aliasing or passing as callbacks and use only literal nonnegative numeric indices without variable index reads. On valid input count from 0 to fileCount-1 pushing each in order into a fresh startOrder array, then chunk in order with for-of into a fresh batches array of fresh batch arrays with at most concurrency ids per batch, first batches full and last possibly short, empty when fileCount is 0. Return a fresh plain object with keys startOrder and batches in this order with no extra keys and no shared references. Preserve input with no mutation, no imports, no classes, no async, no this, no reflection, no mutable module variables, no job creation, no store mutation, no queue creation, no queue mutation, no timers, no Date, no randomness, no callbacks, no dependencies, no provider calls, no network, no shell, no file reading and no ffprobe; deterministic pure JSON transform mirroring inspectVideoBatch index-order slot filling and order preservation without executing inspection.
+
+Examples (JSON input and expected output):
+
+```json
+{
+  "input": {
+    "concurrency": 2,
+    "fileCount": 3
+  },
+  "output": {
+    "batches": [
+      [
+        0,
+        1
+      ],
+      [
+        2
+      ]
+    ],
+    "startOrder": [
+      0,
+      1,
+      2
+    ]
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "concurrency": 2,
+    "fileCount": 0
+  },
+  "output": {
+    "batches": [],
+    "startOrder": []
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "concurrency": 4,
+    "fileCount": 5
+  },
+  "output": {
+    "batches": [
+      [
+        0,
+        1,
+        2,
+        3
+      ],
+      [
+        4
+      ]
+    ],
+    "startOrder": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ]
+  }
+}
+```
+
+Public regression tests: `test/community_video_batch_scheduling_preview.test.js`.
