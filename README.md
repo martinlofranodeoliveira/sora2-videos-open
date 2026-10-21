@@ -720,3 +720,67 @@ Examples (JSON input and expected output):
 ```
 
 Public regression tests: `test/community_video_start_gate_preview.test.js`.
+
+
+<!-- community-core:video-shutdown-preview -->
+### Deterministic Video Shutdown Preview
+
+Lets video pipeline users pre-check VideoJobs shutdown outcomes locally with a pure deterministic gate that mirrors first-close true versus unknown or already-closed false, catching invalid names before touching the in-memory manager without timers, network, ffprobe, files or provider calls.
+
+Reusable deterministic JSON core: `src/community/video_shutdown_preview.mjs`, API `runFeature(payload)`. This module is independently tested; application/UI integration is outside this change.
+
+Public API is runFeature(payload). payload must be a non-null non-Array object containing only keys name, registered and closed using Object.entries own enumerable string-key checks with no coercion; Array payload, null payload, non-object payload or any other own enumerable string key throws TypeError('INVALID_SHUTDOWN_PREVIEW') before any normalization. name must be present and must be a primitive string with length 1 to 40 inclusive matching ^[a-z][a-z0-9-]{0,39}$ with first character a-z and remainder a-z, 0-9 or hyphen, otherwise throws TypeError('INVALID_SHUTDOWN_PREVIEW') for missing, undefined, null, empty, overlong, uppercase, leading digit or hyphen, underscore, spaces, invalid characters, numeric, boolean, array or object values without coercion. registered must be present and must be a dense Array with length 0 to 32 inclusive where every index has its own property and every element is a primitive string with length 1 to 40 matching the same name rule, otherwise throws TypeError('INVALID_SHUTDOWN_PREVIEW') for missing, undefined, null, non-Array, sparse, overlong, non-string or invalid-name elements without coercion. closed must be present and must be a dense Array with length 0 to 32 inclusive with the same element rule, otherwise throws TypeError('INVALID_SHUTDOWN_PREVIEW') for missing, undefined, null, non-Array, sparse or invalid elements without coercion. To extract fields iterate Object.entries with for-of and Map get/set instead of variable computed access, with no prototype/constructor access and no input mutation. On valid input determine membership by iterating values with for-of without variable index access: when name is not present in registered return a fresh plain object {result:false,reason:'unknown'}; else when name is present in closed return a fresh plain object {result:false,reason:'already-closed'}; else return a fresh plain object {result:true,reason:'will-close'}. Return objects contain only result and reason in this order with no extra keys and no shared references. Preserve input with no mutation, no provider registration, no queue creation, no queue mutation, no shutdown, no timers, no Date, no randomness, no callbacks, no dependencies, no provider calls, no network, no shell, no file reading, no ffprobe; deterministic pure JSON transform previewing VideoJobs shutdown first-close versus unknown or already-closed without touching managers.
+
+Examples (JSON input and expected output):
+
+```json
+{
+  "input": {
+    "closed": [],
+    "name": "my-provider",
+    "registered": [
+      "my-provider"
+    ]
+  },
+  "output": {
+    "reason": "will-close",
+    "result": true
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "closed": [],
+    "name": "other-one",
+    "registered": [
+      "my-provider"
+    ]
+  },
+  "output": {
+    "reason": "unknown",
+    "result": false
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "closed": [
+      "my-provider"
+    ],
+    "name": "my-provider",
+    "registered": [
+      "my-provider"
+    ]
+  },
+  "output": {
+    "reason": "already-closed",
+    "result": false
+  }
+}
+```
+
+Public regression tests: `test/community_video_shutdown_preview.test.js`.
