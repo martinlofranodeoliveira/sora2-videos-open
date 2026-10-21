@@ -596,3 +596,53 @@ Examples (JSON input and expected output):
 ```
 
 Public regression tests: `test/community_video_job_capacity_preview.test.js`.
+
+
+<!-- community-core:video-provider-name-preview -->
+### Deterministic Video Provider Name Preview
+
+Lets video pipeline users pre-check VideoJobs provider names locally with a pure deterministic string guard that mirrors the register and shutdown name rule, catching malformed names before touching the in-memory store without timers, network, ffprobe, files or provider calls.
+
+Reusable deterministic JSON core: `src/community/video_provider_name_preview.mjs`, API `runFeature(payload)`. This module is independently tested; application/UI integration is outside this change.
+
+Public API is runFeature(payload). payload must be a non-null non-Array object containing only key name using Object.entries own enumerable string-key checks with no coercion; Array payload, null payload, non-object payload or any other own enumerable string key throws TypeError('INVALID_PROVIDER_NAME_PREVIEW') before any normalization. name must be present and must be a primitive string with length 1 to 40 inclusive matching ^[a-z][a-z0-9-]{0,39}$ with first character a-z and remainder a-z, 0-9 or hyphen, otherwise throws TypeError('INVALID_PROVIDER_NAME_PREVIEW') for missing, undefined, null, empty, overlong, uppercase, leading digit or hyphen, underscore, spaces, invalid characters, numeric, boolean, array or object values without coercion. To extract name iterate Object.entries with for-of and Map get/set instead of variable computed access, with no prototype/constructor access and no input mutation. On valid input return a fresh plain object {name,length} in this order with no extra keys and no shared references where length is name.length as a safe integer. Preserve input with no mutation, no provider registration, no queue creation, no queue mutation, no timers, no Date, no randomness, no callbacks, no dependencies, no provider calls, no network, no shell, no file reading, no ffprobe; deterministic pure JSON transform previewing VideoJobs register and shutdown name guard without touching jobs.
+
+Examples (JSON input and expected output):
+
+```json
+{
+  "input": {
+    "name": "my-provider"
+  },
+  "output": {
+    "length": 11,
+    "name": "my-provider"
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "name": "a"
+  },
+  "output": {
+    "length": 1,
+    "name": "a"
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "name": "renderer-01"
+  },
+  "output": {
+    "length": 11,
+    "name": "renderer-01"
+  }
+}
+```
+
+Public regression tests: `test/community_video_provider_name_preview.test.js`.
