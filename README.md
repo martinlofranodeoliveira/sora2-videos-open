@@ -646,3 +646,77 @@ Examples (JSON input and expected output):
 ```
 
 Public regression tests: `test/community_video_provider_name_preview.test.js`.
+
+
+<!-- community-core:video-start-gate-preview -->
+### Deterministic Video Start Gate Preview
+
+Lets video pipeline users pre-check whether a queued video operation could start locally with a pure deterministic gate that mirrors the provider and raw queue rule that both rate budget and concurrency slots must permit a start, catching closed queues, exhausted rate budgets or full slots before queueing without timers, network, ffprobe, files or provider calls.
+
+Reusable deterministic JSON core: `src/community/video_start_gate_preview.mjs`, API `runFeature(payload)`. This module is independently tested; application/UI integration is outside this change.
+
+Public API is runFeature(payload). payload must be a non-null non-Array object containing only keys maxConcurrent, active, rateAvailable and closed using Object.entries own enumerable string-key checks with no coercion; Array payload, null payload, non-object payload or any other own enumerable string key throws TypeError('INVALID_START_GATE_PREVIEW') before any normalization. maxConcurrent must be either null for unlimited or satisfy Number.isSafeInteger with 1 to 9007199254740991 inclusive, else throws TypeError('INVALID_START_GATE_PREVIEW') for missing, undefined, 0, negative, fractions, numeric strings, NaN, Infinity, booleans, arrays or objects without coercion. active must satisfy Number.isSafeInteger with 0 to 9007199254740991 inclusive, else throws TypeError('INVALID_START_GATE_PREVIEW') for missing, undefined, null, negative, fractions, numeric strings, NaN, Infinity, booleans, arrays or objects without coercion. rateAvailable must be a primitive boolean true or false, else throws TypeError('INVALID_START_GATE_PREVIEW') for missing, undefined, null, numbers, numeric strings, arrays or objects without coercion. closed must be a primitive boolean true or false, else throws TypeError('INVALID_START_GATE_PREVIEW') for missing, undefined, null, numbers, numeric strings, arrays or objects without coercion. To extract fields iterate Object.entries with for-of and Map get/set instead of variable computed access, with no prototype/constructor access and no input mutation. On valid input return a fresh plain object {canStart,blockedBy} in this order with no extra keys and no shared references where when closed is true canStart is false and blockedBy is 'closed', else when rateAvailable is false canStart is false and blockedBy is 'rate', else when maxConcurrent is not null and active is greater than or equal to maxConcurrent canStart is false and blockedBy is 'concurrency', else canStart is true and blockedBy is null. Preserve input with no mutation, no queue creation, no queue mutation, no job creation, no store mutation, no timers, no Date, no randomness, no callbacks, no dependencies, no provider calls, no network, no shell, no file reading, no ffprobe; deterministic pure JSON transform mirroring VideoJobs and generation queue start gate where both rate budget and concurrency slots must permit a start and snapshot null means unlimited.
+
+Examples (JSON input and expected output):
+
+```json
+{
+  "input": {
+    "active": 1,
+    "closed": false,
+    "maxConcurrent": 2,
+    "rateAvailable": true
+  },
+  "output": {
+    "blockedBy": null,
+    "canStart": true
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "active": 2,
+    "closed": false,
+    "maxConcurrent": 2,
+    "rateAvailable": true
+  },
+  "output": {
+    "blockedBy": "concurrency",
+    "canStart": false
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "active": 0,
+    "closed": false,
+    "maxConcurrent": null,
+    "rateAvailable": false
+  },
+  "output": {
+    "blockedBy": "rate",
+    "canStart": false
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "active": 0,
+    "closed": true,
+    "maxConcurrent": 1,
+    "rateAvailable": true
+  },
+  "output": {
+    "blockedBy": "closed",
+    "canStart": false
+  }
+}
+```
+
+Public regression tests: `test/community_video_start_gate_preview.test.js`.
