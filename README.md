@@ -413,3 +413,59 @@ Examples (JSON input and expected output):
 ```
 
 Public regression tests: `test/community_video_job_spec_preview.test.js`.
+
+
+<!-- community-core:video-job-forget-preview -->
+### Deterministic Video Job Forget Eligibility Preview
+
+Lets video pipeline users pre-check VideoJobs.forget eligibility locally with a pure deterministic status check that mirrors the queued/running guard, catching attempts to forget active jobs before touching the in-memory store without timers, network, ffprobe, files or provider calls.
+
+Reusable deterministic JSON core: `src/community/video_job_forget_preview.mjs`, API `runFeature(payload)`. This module is independently tested; application/UI integration is outside this change.
+
+Public API is runFeature(payload). payload must be a non-null non-Array object containing only key status using Object.entries own enumerable string-key checks with no coercion; Array payload, null payload, non-object payload or any other own enumerable string key throws TypeError('INVALID_FORGET_PREVIEW') before any normalization. status must be present and must be a primitive string exactly queued, running, completed, failed or cancelled, else throws TypeError('INVALID_FORGET_PREVIEW') for missing, undefined, empty, whitespace, uppercase, numeric, boolean, null, array or object values without coercion. To extract status iterate Object.entries with for-of and Map get/set instead of computed property access, with no prototype/constructor access and no input mutation. On valid input return a fresh plain object {status,canForget,isActive,isTerminal} in this order where canForget is true when status is completed, failed or cancelled else false, isActive is true when status is queued or running else false, isTerminal equals canForget, with no extra keys, no shared references, no timestamps. No input mutation, no job creation, no store mutation, no queue creation, no queue mutation, no timers, no Date, no randomness, no callbacks, no dependencies, no provider calls, no network, no shell, no file reading, no ffprobe; deterministic pure JSON transform mirroring VideoJobs.forget active-job guard and get/list lifecycle values without touching jobs.
+
+Examples (JSON input and expected output):
+
+```json
+{
+  "input": {
+    "status": "queued"
+  },
+  "output": {
+    "canForget": false,
+    "isActive": true,
+    "isTerminal": false,
+    "status": "queued"
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "status": "completed"
+  },
+  "output": {
+    "canForget": true,
+    "isActive": false,
+    "isTerminal": true,
+    "status": "completed"
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "status": "cancelled"
+  },
+  "output": {
+    "canForget": true,
+    "isActive": false,
+    "isTerminal": true,
+    "status": "cancelled"
+  }
+}
+```
+
+Public regression tests: `test/community_video_job_forget_preview.test.js`.
