@@ -216,3 +216,88 @@ the reusable core, not every feature of the former SaaS.
 
 Contributions must include regression tests and use synthetic fixtures. See
 [AGENTS.md](AGENTS.md). Code is MIT; external media and provider rights are separate.
+
+
+<!-- community-core:video-inspection-normalizer -->
+### Deterministic Video Inspection Result Normalizer
+
+Lets toolkit users normalize raw local video inspection values locally with a pure deterministic check that mirrors inspectVideoBatch success projection, catching malformed metadata before reporting without ffprobe, shell, file reading, network, timers, or provider calls.
+
+Reusable deterministic JSON core: `src/community/video_inspection_normalizer.mjs`, API `runFeature(payload)`. This module is independently tested; application/UI integration is outside this change.
+
+Public API is runFeature(payload). payload must be a non-null non-Array object with exactly one own enumerable string key 'raw'; otherwise throws TypeError('INVALID_INSPECTION_INPUT') before reading inner value. Let raw be payload.raw with no coercion. If raw is not a non-null non-Array object return a fresh plain object {status:'error',code:'INSPECTION_FAILED'}. Otherwise read only raw.format, raw.durationSeconds, raw.bytes, raw.width, raw.height, raw.codec and raw.audioStreams; all other keys are ignored and never read. Normalize optionals: format if undefined or null or missing then null else must be a primitive string with length 1 to 32 else return error envelope; codec follows the same rule as format. durationSeconds if undefined or null or missing then null else must be a finite number with 0 < value <= 86400 else return error envelope. bytes if undefined or null or missing then null else must satisfy Number.isSafeInteger with 0 <= value <= 9007199254740991 else return error envelope. Validate required: width must satisfy Number.isSafeInteger with 1 <= value <= 8192 else return error envelope including when missing, null or undefined; height follows the same rule as width; audioStreams must satisfy Number.isSafeInteger with 0 <= value <= 32 else return error envelope including when missing, null or undefined. No coercion: numeric strings, booleans, NaN, Infinity or objects never satisfy numeric checks. On valid input return a fresh plain object {status:'ok',video:{format,durationSeconds,bytes,width,height,codec,audioStreams}} in this order with no extra keys and no shared references. On invalid raw content return a fresh plain object {status:'error',code:'INSPECTION_FAILED'} with no extra keys, messages, stacks or paths. Deterministic pure JSON transform mirroring inspectVideoBatch projection without inspector execution, shell, file reading, ffprobe, network, env, processes, time, Date, randomness, callbacks, dependencies or queue creation; never mutates inputs and never returns timestamps.
+
+Examples (JSON input and expected output):
+
+```json
+{
+  "input": {
+    "raw": {
+      "audioStreams": 1,
+      "bytes": 42,
+      "codec": "h264",
+      "durationSeconds": 1.5,
+      "format": "mp4",
+      "height": 480,
+      "width": 640
+    }
+  },
+  "output": {
+    "status": "ok",
+    "video": {
+      "audioStreams": 1,
+      "bytes": 42,
+      "codec": "h264",
+      "durationSeconds": 1.5,
+      "format": "mp4",
+      "height": 480,
+      "width": 640
+    }
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "raw": {
+      "audioStreams": 0,
+      "height": 720,
+      "width": 1280
+    }
+  },
+  "output": {
+    "status": "ok",
+    "video": {
+      "audioStreams": 0,
+      "bytes": null,
+      "codec": null,
+      "durationSeconds": null,
+      "format": null,
+      "height": 720,
+      "width": 1280
+    }
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "raw": {
+      "audioStreams": 1,
+      "bytes": 42,
+      "codec": "h264",
+      "durationSeconds": 1.5,
+      "format": "mp4",
+      "width": 640
+    }
+  },
+  "output": {
+    "code": "INSPECTION_FAILED",
+    "status": "error"
+  }
+}
+```
+
+Public regression tests: `test/community_video_inspection_normalizer.test.js`.
