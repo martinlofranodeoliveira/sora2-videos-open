@@ -1115,3 +1115,50 @@ Examples (JSON input and expected output):
 ```
 
 Public regression tests: `test/community_video_timeout_gate_preview.test.js`.
+
+
+<!-- community-core:video-seconds-gate-preview -->
+### Deterministic Video Seconds Gate Preview
+
+Lets toolkit users pre-check VideoJobs seconds values locally with a pure deterministic preview that mirrors the 1 to 120 integer gate, catching missing or out-of-range durations before submission without jobs, queues, timers, network, ffprobe, files or provider calls.
+
+Reusable deterministic JSON core: `src/community/video_seconds_gate_preview.mjs`, API `runFeature(payload)`. This module is independently tested; application/UI integration is outside this change.
+
+Public API is runFeature(payload). payload must be a non-null non-Array object containing only key seconds using Object.entries own enumerable string-key checks with no coercion, otherwise throws TypeError('INVALID_SECONDS_GATE_PREVIEW') before reading inner values. seconds must be a primitive number satisfying Number.isSafeInteger with 1 <= value <= 120, otherwise throws TypeError('INVALID_SECONDS_GATE_PREVIEW') for missing, undefined, null, strings, booleans, arrays, objects, fractions, NaN, Infinity, zero, negatives or over-range values without coercion. To extract fields iterate Object.entries with for-of and Map get and set instead of variable computed access, with no prototype or constructor access and no input mutation. Build objects with object literals, arrays with push, and maps with set. Call builtins directly without aliasing or passing as callbacks and use only literal nonnegative numeric indices without variable index reads. On valid input return a fresh plain object with only key seconds in this order with no extra keys and no shared references where value echoes validated seconds. Preserve input with no mutation, no imports, no classes, no async, no this, no reflection, no mutable module variables, no timers, no Date, no randomness, no callbacks, no dependencies, no provider calls, no network, no shell, no file reading and no ffprobe; deterministic pure JSON transform mirroring VideoJobs seconds gate without enqueueing.
+
+Examples (JSON input and expected output):
+
+```json
+{
+  "input": {
+    "seconds": 8
+  },
+  "output": {
+    "seconds": 8
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "seconds": 1
+  },
+  "output": {
+    "seconds": 1
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "seconds": 120
+  },
+  "output": {
+    "seconds": 120
+  }
+}
+```
+
+Public regression tests: `test/community_video_seconds_gate_preview.test.js`.
