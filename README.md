@@ -1068,3 +1068,50 @@ Examples (JSON input and expected output):
 ```
 
 Public regression tests: `test/community_video_size_parse_preview.test.js`.
+
+
+<!-- community-core:video-timeout-gate-preview -->
+### Deterministic Video Timeout Gate Preview
+
+Lets toolkit users pre-check inspectVideoBatch timeout values locally with a pure deterministic preview that mirrors the 1 to 30000 ms integer gate, catching missing or out-of-range timeouts before inspection without ffprobe, shell, files, network, timers or provider calls.
+
+Reusable deterministic JSON core: `src/community/video_timeout_gate_preview.mjs`, API `runFeature(payload)`. This module is independently tested; application/UI integration is outside this change.
+
+Public API is runFeature(payload). payload must be a non-null non-Array object containing only key timeout using Object.entries own enumerable string-key checks with no coercion, otherwise throws TypeError('INVALID_TIMEOUT_GATE_PREVIEW') before reading inner values. timeout must be a primitive number satisfying Number.isSafeInteger with 1 <= value <= 30000, otherwise throws TypeError('INVALID_TIMEOUT_GATE_PREVIEW') for missing, undefined, null, strings, booleans, arrays, objects, fractions, NaN, Infinity, zero, negatives or over-range values without coercion. To extract fields iterate Object.entries with for-of and Map get and set instead of variable computed access, with no prototype or constructor access and no input mutation. Build objects with object literals, arrays with push, and maps with set. Call builtins directly without aliasing or passing as callbacks and use only literal nonnegative numeric indices without variable index reads. On valid input return a fresh plain object with only key timeout in this order with no extra keys and no shared references where value echoes validated timeout. Preserve input with no mutation, no imports, no classes, no async, no this, no reflection, no mutable module variables, no timers, no Date, no randomness, no callbacks, no dependencies, no provider calls, no network, no shell, no file reading and no ffprobe; deterministic pure JSON transform mirroring inspectVideoBatch timeout gate without executing inspection.
+
+Examples (JSON input and expected output):
+
+```json
+{
+  "input": {
+    "timeout": 5000
+  },
+  "output": {
+    "timeout": 5000
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "timeout": 1
+  },
+  "output": {
+    "timeout": 1
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "timeout": 30000
+  },
+  "output": {
+    "timeout": 30000
+  }
+}
+```
+
+Public regression tests: `test/community_video_timeout_gate_preview.test.js`.
