@@ -784,3 +784,75 @@ Examples (JSON input and expected output):
 ```
 
 Public regression tests: `test/community_video_shutdown_preview.test.js`.
+
+
+<!-- community-core:video-batch-summary-preview -->
+### Deterministic Video Batch Summary Preview
+
+Lets toolkit users summarize small inspectVideoBatch result arrays locally with a pure deterministic count that mirrors ok versus error envelopes, catching mixed or failing batches before reporting without ffprobe, shell, file reading, network, timers or provider calls.
+
+Reusable deterministic JSON core: `src/community/video_batch_summary_preview.mjs`, API `runFeature(payload)`. This module is independently tested; application/UI integration is outside this change.
+
+Public API is runFeature(payload). payload must be a non-null non-Array object containing only key entries using Object.entries own enumerable string-key checks with no coercion, otherwise throws TypeError('INVALID_BATCH_SUMMARY_PREVIEW') before reading inner values. entries must be a dense Array with length 0 to 32 inclusive where every index has its own property, otherwise throws TypeError('INVALID_BATCH_SUMMARY_PREVIEW') for missing, undefined, null, non-Array, sparse, overlong, string, number, boolean or object values without coercion. Each element must be a non-null non-Array object, otherwise throws TypeError('INVALID_BATCH_SUMMARY_PREVIEW') without coercion. To extract fields iterate Object.entries with for-of and Map get and set instead of variable computed access, with no prototype or constructor access and no input mutation. For each entry read only its own enumerable string key status with no coercion and ignore all other keys without reading them; status must be a primitive string exactly ok or error, otherwise throws TypeError('INVALID_BATCH_SUMMARY_PREVIEW') for missing, undefined, null, empty, other strings, numbers, booleans, arrays or objects without coercion. On valid input count with for-of without variable index access where total is entries length and ok is count of status ok and errors is count of status error. Return a fresh plain object with keys total, ok and errors in this order with no extra keys and no shared references. Preserve input with no mutation, no job creation, no store mutation, no queue creation, no queue mutation, no timers, no Date, no randomness, no callbacks, no dependencies, no provider calls, no network, no shell, no file reading and no ffprobe; deterministic pure JSON transform mirroring inspectVideoBatch ok versus error envelopes for batch media reports without executing inspection.
+
+Examples (JSON input and expected output):
+
+```json
+{
+  "input": {
+    "entries": []
+  },
+  "output": {
+    "errors": 0,
+    "ok": 0,
+    "total": 0
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "entries": [
+      {
+        "status": "ok"
+      },
+      {
+        "status": "error"
+      },
+      {
+        "status": "ok"
+      }
+    ]
+  },
+  "output": {
+    "errors": 1,
+    "ok": 2,
+    "total": 3
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "entries": [
+      {
+        "index": 0,
+        "status": "ok"
+      },
+      {
+        "index": 1,
+        "status": "error"
+      }
+    ]
+  },
+  "output": {
+    "errors": 1,
+    "ok": 1,
+    "total": 2
+  }
+}
+```
+
+Public regression tests: `test/community_video_batch_summary_preview.test.js`.
