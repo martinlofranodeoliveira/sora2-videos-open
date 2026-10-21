@@ -856,3 +856,84 @@ Examples (JSON input and expected output):
 ```
 
 Public regression tests: `test/community_video_batch_summary_preview.test.js`.
+
+
+<!-- community-core:video-priority-order-preview -->
+### Deterministic Video Queue Priority Order Preview
+
+Lets video pipeline users pre-check generation queue start order locally with a pure deterministic preview that mirrors high-before-low FIFO retention, catching starvation or mis-prioritized batches before enqueueing without timers, network, ffprobe, files or provider calls.
+
+Reusable deterministic JSON core: `src/community/video_priority_order_preview.mjs`, API `runFeature(payload)`. This module is independently tested; application/UI integration is outside this change.
+
+Public API is runFeature(payload). payload must be a non-null non-Array object containing only key pending using Object.entries own enumerable string-key checks with no coercion, otherwise throws TypeError('INVALID_PRIORITY_ORDER_PREVIEW') before reading inner values. pending must be a dense Array with length 0 to 32 inclusive where every index has its own property, otherwise throws TypeError('INVALID_PRIORITY_ORDER_PREVIEW') for missing, undefined, null, non-Array, sparse, overlong, string, number, boolean or object values without coercion. Each element must be a non-null non-Array object containing only keys id and priority using Object.entries checks with no coercion, otherwise throws TypeError('INVALID_PRIORITY_ORDER_PREVIEW') without coercion. id must be a primitive string with length 1 to 128 inclusive, otherwise throws TypeError('INVALID_PRIORITY_ORDER_PREVIEW') for missing, undefined, null, empty, overlong, numeric, boolean, array or object values without coercion. priority must be a primitive string exactly high or low where high mirrors GenerationQueuePriority.HIGH and low mirrors the default low priority, otherwise throws TypeError('INVALID_PRIORITY_ORDER_PREVIEW') for missing, undefined, null, other strings, numbers, booleans, arrays or objects without coercion. To extract fields iterate Object.entries with for-of and Map get/set instead of variable computed access, with no prototype/constructor access and no input mutation. On valid input collect with for-of without variable index access: first in index order all ids with priority high into a fresh array via push, then in index order all ids with priority low into a second fresh array via push, then concatenate by pushing each in order into a fresh result array preserving FIFO within each priority and high-before-low across priorities. Return a fresh plain object with only key orderedIds in this order with no extra keys and no shared references where orderedIds is the fresh array of ids. Preserve input with no mutation, no job creation, no store mutation, no queue creation, no queue mutation, no timers, no Date, no randomness, no callbacks, no dependencies, no provider calls, no network, no shell, no file reading and no ffprobe; deterministic pure JSON transform mirroring generation queue pending high-before-low FIFO order without starting work.
+
+Examples (JSON input and expected output):
+
+```json
+{
+  "input": {
+    "pending": []
+  },
+  "output": {
+    "orderedIds": []
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "pending": [
+      {
+        "id": "a",
+        "priority": "low"
+      },
+      {
+        "id": "b",
+        "priority": "high"
+      },
+      {
+        "id": "c",
+        "priority": "low"
+      }
+    ]
+  },
+  "output": {
+    "orderedIds": [
+      "b",
+      "a",
+      "c"
+    ]
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "pending": [
+      {
+        "id": "j1",
+        "priority": "high"
+      },
+      {
+        "id": "j2",
+        "priority": "high"
+      },
+      {
+        "id": "j3",
+        "priority": "low"
+      }
+    ]
+  },
+  "output": {
+    "orderedIds": [
+      "j1",
+      "j2",
+      "j3"
+    ]
+  }
+}
+```
+
+Public regression tests: `test/community_video_priority_order_preview.test.js`.
