@@ -538,3 +538,61 @@ Examples (JSON input and expected output):
 ```
 
 Public regression tests: `test/community_video_batch_input_preview.test.js`.
+
+
+<!-- community-core:video-job-capacity-preview -->
+### Deterministic Video Job Capacity Preview
+
+Lets video pipeline users pre-check VideoJobs capacity locally with a pure deterministic count check that mirrors the maxJobs constructor guard and submit capacity guard, catching full stores before queueing without timers, network, ffprobe, files or provider calls.
+
+Reusable deterministic JSON core: `src/community/video_job_capacity_preview.mjs`, API `runFeature(payload)`. This module is independently tested; application/UI integration is outside this change.
+
+Public API is runFeature(payload). payload must be a non-null non-Array object containing only keys maxJobs and currentCount using Object.entries own enumerable string-key checks with no coercion; Array payload, null payload, non-object payload or any other own enumerable string key throws TypeError('INVALID_CAPACITY_PREVIEW') before any normalization. maxJobs when omitted or undefined defaults to 1000, else must satisfy Number.isSafeInteger and 1 to 9007199254740991 inclusive, else throws TypeError('INVALID_CAPACITY_PREVIEW') for null, 0, negative, fractions, numeric strings, NaN, Infinity or booleans without coercion. currentCount must be present and must satisfy Number.isSafeInteger with 0 to 9007199254740991 inclusive, else throws TypeError('INVALID_CAPACITY_PREVIEW') for missing, undefined, null, negative, fractions, numeric strings, NaN, Infinity, booleans, arrays or objects without coercion. To extract fields iterate Object.entries with for-of and Map get/set instead of variable computed access, with no prototype/constructor access and no input mutation. On valid input return a fresh plain object {maxJobs,currentCount,canSubmit,remaining} in this order where maxJobs is the effective value, canSubmit is true when currentCount is strictly less than maxJobs else false, remaining is maxJobs minus currentCount when canSubmit is true else 0, with no extra keys, no shared references, no timestamps. No input mutation, no job creation, no store mutation, no queue creation, no queue mutation, no timers, no Date, no randomness, no callbacks, no dependencies, no provider calls, no network, no shell, no file reading, no ffprobe; deterministic pure JSON transform mirroring VideoJobs constructor maxJobs guard and submit capacity guard without touching jobs.
+
+Examples (JSON input and expected output):
+
+```json
+{
+  "input": {
+    "currentCount": 3,
+    "maxJobs": 10
+  },
+  "output": {
+    "canSubmit": true,
+    "currentCount": 3,
+    "maxJobs": 10,
+    "remaining": 7
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "currentCount": 1000
+  },
+  "output": {
+    "canSubmit": false,
+    "currentCount": 1000,
+    "maxJobs": 1000,
+    "remaining": 0
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "currentCount": 0,
+    "maxJobs": 1
+  },
+  "output": {
+    "canSubmit": true,
+    "currentCount": 0,
+    "maxJobs": 1,
+    "remaining": 1
+  }
+}
+```
+
+Public regression tests: `test/community_video_job_capacity_preview.test.js`.
