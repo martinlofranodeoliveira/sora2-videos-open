@@ -1018,3 +1018,53 @@ Examples (JSON input and expected output):
 ```
 
 Public regression tests: `test/community_video_batch_scheduling_preview.test.js`.
+
+
+<!-- community-core:video-size-parse-preview -->
+### Deterministic Video Size Parse Preview
+
+Lets video pipeline users pre-parse WIDTHxHEIGHT size text locally with a pure deterministic preview that mirrors VideoJobs.submit dimension gate, catching malformed or out-of-range sizes before enqueueing without jobs, queues, timers, network, ffprobe, files or provider calls.
+
+Reusable deterministic JSON core: `src/community/video_size_parse_preview.mjs`, API `runFeature(payload)`. This module is independently tested; application/UI integration is outside this change.
+
+Public API is runFeature(payload). payload must be a non-null non-Array object containing only key size using Object.entries own enumerable string-key checks with no coercion, otherwise throws TypeError('INVALID_SIZE_PARSE_PREVIEW') before reading inner value. size must be a primitive string, otherwise throws TypeError('INVALID_SIZE_PARSE_PREVIEW') for missing, undefined, null, numbers, booleans, arrays or objects without coercion. To extract fields iterate Object.entries with for-of and Map get/set instead of variable computed access, with no prototype/constructor access and no input mutation. Split size on "x" with String split called directly; must yield exactly 2 parts otherwise throws. Each part must match /^[0-9]{2,4}$/ via RegExp test called directly otherwise throws for whitespace, line terminators (CR, LF, U+2028, U+2029), wrong separators, 1-digit or 5-digit sides, signs, decimals or coerced objects. Reconstructed canonical part0+x+part1 using only literal indices parts[0] and parts[1] must equal original size otherwise throws. Convert with Number called directly; width and height must satisfy Number.isSafeInteger with 64 <= value <= 4096 otherwise throws for out-of-range, NaN, Infinity or fractions. Build objects with object literals, arrays with push, and maps with set. Call builtins directly without aliasing or passing as callbacks and use only literal nonnegative numeric indices without variable index reads. On valid input return a fresh plain object with keys width and height in this order with no extra keys and no shared references. Preserve input with no mutation, no job creation, no store mutation, no queue creation, no queue mutation, no timers, no Date, no randomness, no callbacks, no dependencies, no provider calls, no network, no shell, no file reading and no ffprobe; deterministic pure JSON transform mirroring VideoJobs.submit WIDTHxHEIGHT gate and dimension range without creating records.
+
+Examples (JSON input and expected output):
+
+```json
+{
+  "input": {
+    "size": "1280x720"
+  },
+  "output": {
+    "height": 720,
+    "width": 1280
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "size": "64x64"
+  },
+  "output": {
+    "height": 64,
+    "width": 64
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "size": "4096x4096"
+  },
+  "output": {
+    "height": 4096,
+    "width": 4096
+  }
+}
+```
+
+Public regression tests: `test/community_video_size_parse_preview.test.js`.
