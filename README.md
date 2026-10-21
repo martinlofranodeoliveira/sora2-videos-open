@@ -1162,3 +1162,50 @@ Examples (JSON input and expected output):
 ```
 
 Public regression tests: `test/community_video_seconds_gate_preview.test.js`.
+
+
+<!-- community-core:video-raw-queue-name-preview -->
+### Deterministic Raw Queue Name Gate Preview
+
+Lets toolkit users pre-check raw generation queue names locally with a pure deterministic preview that mirrors the nonempty-string literal gate including __proto__, catching missing or empty names before configuration without queues, timers, network, ffprobe, files or provider calls.
+
+Reusable deterministic JSON core: `src/community/video_raw_queue_name_preview.mjs`, API `runFeature(payload)`. This module is independently tested; application/UI integration is outside this change.
+
+Public API is runFeature(payload). payload must be a non-null non-Array object containing only key queue using Object.entries own enumerable string-key checks with no coercion, otherwise throws TypeError('INVALID_RAW_QUEUE_NAME_PREVIEW') before reading inner values. queue must be a primitive string with length 1 to 256 inclusive, otherwise throws TypeError('INVALID_RAW_QUEUE_NAME_PREVIEW') for missing, undefined, null, empty, over-length, numbers, booleans, arrays or objects without coercion; any nonempty content including '__proto__', spaces or symbols is valid mirroring raw literal acceptance distinct from strict provider-name pattern. To extract fields iterate Object.entries with for-of and Map get and set instead of variable computed access, with no prototype or constructor access and no input mutation. Build objects with object literals, arrays with push, and maps with set. Call builtins directly without aliasing or passing as callbacks and use only literal nonnegative numeric indices without variable index reads. On valid input return a fresh plain object with only key queue in this order with no extra keys and no shared references where value echoes validated queue. Preserve input with no mutation, no imports, no classes, no async, no this, no reflection, no mutable module variables, no timers, no Date, no randomness, no callbacks, no dependencies, no provider calls, no network, no shell, no file reading and no ffprobe; deterministic pure JSON transform mirroring raw generation queue name gate without enqueueing.
+
+Examples (JSON input and expected output):
+
+```json
+{
+  "input": {
+    "queue": "renderer"
+  },
+  "output": {
+    "queue": "renderer"
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "queue": "__proto__"
+  },
+  "output": {
+    "queue": "__proto__"
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "queue": "a"
+  },
+  "output": {
+    "queue": "a"
+  }
+}
+```
+
+Public regression tests: `test/community_video_raw_queue_name_preview.test.js`.
