@@ -1209,3 +1209,50 @@ Examples (JSON input and expected output):
 ```
 
 Public regression tests: `test/community_video_raw_queue_name_preview.test.js`.
+
+
+<!-- community-core:video-maxjobs-gate-preview -->
+### Deterministic VideoJobs MaxJobs Gate Preview
+
+Lets toolkit users pre-check VideoJobs constructor maxJobs values locally with a pure deterministic gate mirroring the positive safe-integer rule, catching zero, negative, fractional or non-numeric capacities before instantiation without jobs, queues, timers, files, ffprobe, network or provider calls.
+
+Reusable deterministic JSON core: `src/community/video_maxjobs_gate_preview.mjs`, API `runFeature(payload)`. This module is independently tested; application/UI integration is outside this change.
+
+Public API is runFeature(payload). payload must be a non-null non-Array object containing exactly one own enumerable string key using Object.entries own enumerable string-key checks with no coercion, otherwise throws TypeError('INVALID_MAX_JOBS') before reading inner values. The single key must be exactly 'maxJobs', otherwise throws TypeError('INVALID_MAX_JOBS'). Extra string keys throw. Let value be the mapped maxJobs value extracted by iterating Object.entries with for-of and Map get/set instead of variable computed access, with no prototype/constructor access and no input mutation. Validate without coercion mirroring VideoJobs constructor maxJobs rule: if Number.isSafeInteger(value) called directly and value>=1 return fresh plain object with only key maxJobs holding value; otherwise throws TypeError('INVALID_MAX_JOBS') for 0, negatives, fractions, numeric strings, booleans, null, arrays, or plain objects without throwing other errors. No coercion: strings like '10' never parse. On success return fresh plain object with no extra keys and no shared references. Preserve input with no mutation, no imports, no classes, no async, no this, no reflection, no mutable module variables, no timers, no Date, no randomness, no callbacks, no dependencies, no provider calls, no network, no shell, no file reading and no ffprobe; deterministic pure JSON transform mirroring maxJobs validation without creating jobs. No reassignment of function or builtin identifiers and no property assignment, update, delete or Object.assign or Object.create. Build objects with object literals, arrays with push, and maps with set. Call builtins directly without aliasing or passing as callbacks and use only literal nonnegative numeric indices without variable index reads. Use for-of, Object.entries/Object.values, and Map get/set instead. No prototype/constructor access.
+
+Examples (JSON input and expected output):
+
+```json
+{
+  "input": {
+    "maxJobs": 1
+  },
+  "output": {
+    "maxJobs": 1
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "maxJobs": 10
+  },
+  "output": {
+    "maxJobs": 10
+  }
+}
+```
+
+```json
+{
+  "input": {
+    "maxJobs": 1000
+  },
+  "output": {
+    "maxJobs": 1000
+  }
+}
+```
+
+Public regression tests: `test/community_video_maxjobs_gate_preview.test.js`.
